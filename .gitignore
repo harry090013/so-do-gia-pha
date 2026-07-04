@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Next.js build outputs
+.next
+out
+
+# Environment variables (Crucial for security!)
+.env
+.env.local
+.env.production
+.env.development
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Prisma engines and logs
+*.log
+.prisma
+/prisma/migrations
+
+# Temporary scratch folder
+/scratch

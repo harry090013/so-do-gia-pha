@@ -1,0 +1,770 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --- ENUMS ---
+
+enum UserStatus {
+  active
+  disabled
+  pending
+}
+
+enum MembershipRole {
+  owner
+  family_admin
+  branch_manager
+  editor
+  member
+  viewer
+}
+
+enum MembershipStatus {
+  pending
+  active
+  suspended
+  revoked
+}
+
+enum PersonGender {
+  male
+  female
+  other
+  unknown
+}
+
+enum LifeStatus {
+  living
+  deceased
+  unknown
+}
+
+enum PrivacyLevel {
+  normal
+  restricted
+  sensitive
+  private
+}
+
+enum NameType {
+  primary
+  birth_name
+  common_name
+  alias
+  courtesy_name
+  art_name
+  taboo_name
+  unknown
+}
+
+enum ParentRole {
+  father
+  mother
+  parent
+  unknown
+}
+
+enum ParentChildType {
+  biological
+  adoptive
+  step
+  foster
+  guardian
+  ritual_heir
+  unknown
+}
+
+enum PartnershipType {
+  marriage
+  remarriage
+  partner
+  concubine
+  unknown
+}
+
+enum PartnershipStatus {
+  active
+  ended
+  divorced
+  widowed
+  unknown
+}
+
+enum CertaintyLevel {
+  confirmed
+  likely
+  unverified
+  disputed
+}
+
+enum DatePrecision {
+  exact
+  year_only
+  approximate
+  range
+  unknown
+}
+
+enum DateCalendar {
+  gregorian
+  lunar
+  unknown
+}
+
+enum MediaVisibility {
+  family
+  branch
+  restricted
+  sensitive
+  private
+}
+
+enum SourceType {
+  family_book
+  oral_history
+  tombstone
+  birth_certificate
+  death_certificate
+  photo
+  scan
+  document
+  gedcom_import
+  other
+}
+
+enum AuditAction {
+  create
+  update
+  archive
+  restore
+  delete_request
+  approve
+  reject
+  login
+  logout
+  export
+  download
+  role_change
+}
+
+// --- MODELS ---
+
+model User {
+  id                     String            @id @default(uuid()) @db.Uuid
+  authProviderUserId     String?           @unique @map("auth_provider_user_id")
+  displayName            String            @map("display_name")
+  email                  String?           @unique
+  phone                  String?           @unique
+  avatarUrl              String?           @map("avatar_url")
+  status                 UserStatus        @default(pending)
+  lastLoginAt            DateTime?         @map("last_login_at")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+
+  createdFamilies        Family[]          @relation("FamilyCreatedBy")
+  createdBranches        Branch[]          @relation("BranchCreatedBy")
+  createdPeople          Person[]          @relation("PersonCreatedBy")
+  updatedPeople          Person[]          @relation("PersonUpdatedBy")
+  archivedPeople         Person[]          @relation("PersonArchivedBy")
+  createdRelationships   ParentChildRelationship[] @relation("RelationshipCreatedBy")
+  createdPartnerships    Partnership[]     @relation("PartnershipCreatedBy")
+  createdEvents          Event[]           @relation("EventCreatedBy")
+  uploadedMedia          MediaAsset[]      @relation("MediaUploadedBy")
+  createdSources         Source[]          @relation("SourceCreatedBy")
+  memberships            Membership[]      @relation("UserMemberships")
+  invitedMemberships     Membership[]      @relation("MembershipInvitedBy")
+  userPersonLinks        UserPersonLink[]  @relation("UserLinks")
+  verifiedPersonLinks    UserPersonLink[]  @relation("VerifiedLinks")
+  createdInvites         Invite[]          @relation("InviteCreatedBy")
+  acceptedInvites        Invite[]          @relation("InviteAcceptedBy")
+  submittedChanges       ChangeRequest[]   @relation("ChangeSubmittedBy")
+  reviewedChanges        ChangeRequest[]   @relation("ChangeReviewedBy")
+  auditLogs              AuditLog[]        @relation("AuditLogsActor")
+  securityLogs           SecurityLog[]     @relation("SecurityLogsActor")
+  exportJobs             ExportJob[]       @relation("ExportJobsRequester")
+
+  @@map("users")
+}
+
+model Family {
+  id                 String            @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String            @unique
+  description        String?
+  originPlaceId      String?           @map("origin_place_id") @db.Uuid
+  rootPersonId       String?           @map("root_person_id") @db.Uuid
+  visibility         String            @default("invite_only")
+  livingPersonPolicy String            @default("strict") @map("living_person_policy")
+  defaultLocale      String            @default("vi") @map("default_locale")
+  timezone           String            @default("Asia/Ho_Chi_Minh")
+  storageQuotaBytes  BigInt?           @map("storage_quota_bytes")
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  archivedAt         DateTime?         @map("archived_at")
+
+  createdByUser      User              @relation("FamilyCreatedBy", fields: [createdByUserId], references: [id])
+  settings           FamilySettings?
+  branches           Branch[]
+  people             Person[]
+  names              PersonName[]
+  parentChildRelationships ParentChildRelationship[]
+  partnerships       Partnership[]
+  events             Event[]
+  places             Place[]
+  graves             Grave[]
+  mediaAssets        MediaAsset[]
+  mediaLinks         MediaLink[]
+  sources            Source[]
+  sourceCitations    SourceCitation[]
+  memberships        Membership[]
+  userPersonLinks    UserPersonLink[]
+  invites            Invite[]
+  changeRequests     ChangeRequest[]
+  auditLogs          AuditLog[]
+  securityLogs       SecurityLog[]
+  exportJobs         ExportJob[]
+
+  @@map("families")
+}
+
+model FamilySettings {
+  familyId                  String    @id @map("family_id") @db.Uuid
+  allowPublicAccess         Boolean   @default(false) @map("allow_public_access")
+  blockSearchIndex          Boolean   @default(true) @map("block_search_index")
+  requireInvite             Boolean   @default(true) @map("require_invite")
+  livingPersonPolicy        String    @default("strict") @map("living_person_policy")
+  enableLunarCalendar       Boolean   @default(true) @map("enable_lunar_calendar")
+  enableEmailNotifications  Boolean   @default(false) @map("enable_email_notifications")
+  enablePhoneOtp            Boolean   @default(false) @map("enable_phone_otp")
+  customDomain              String?   @map("custom_domain")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  family                    Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@map("family_settings")
+}
+
+model Branch {
+  id              String            @id @default(uuid()) @db.Uuid
+  familyId        String            @map("family_id") @db.Uuid
+  parentBranchId  String?           @map("parent_branch_id") @db.Uuid
+  founderPersonId String?           @map("founder_person_id") @db.Uuid
+  name            String
+  slug            String
+  description     String?
+  sortOrder       Int               @default(0) @map("sort_order")
+  createdByUserId String            @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  archivedAt      DateTime?         @map("archived_at")
+
+  family          Family            @relation(fields: [familyId], references: [id])
+  parentBranch    Branch?           @relation("BranchHierarchy", fields: [parentBranchId], references: [id])
+  childBranches   Branch[]          @relation("BranchHierarchy")
+  createdByUser   User              @relation("BranchCreatedBy", fields: [createdByUserId], references: [id])
+  people          Person[]          @relation("PersonBranch")
+  founderPerson   Person?           @relation("BranchFounder", fields: [founderPersonId], references: [id])
+  events          Event[]
+  memberships     Membership[]      @relation("BranchMemberships")
+  changeRequests  ChangeRequest[]
+
+  @@unique([familyId, slug])
+  @@map("branches")
+}
+
+model Person {
+  id                    String            @id @default(uuid()) @db.Uuid
+  familyId              String            @map("family_id") @db.Uuid
+  branchId              String?           @map("branch_id") @db.Uuid
+  primaryName           String            @map("primary_name")
+  gender                PersonGender      @default(unknown)
+  lifeStatus            LifeStatus        @default(unknown) @map("life_status")
+  isLiving              Boolean           @default(true) @map("is_living")
+  
+  birthDateValue        DateTime?         @map("birth_date_value") @db.Date
+  birthYear             Int?              @map("birth_year")
+  birthDatePrecision    DatePrecision     @default(unknown) @map("birth_date_precision")
+  birthDateCalendar     DateCalendar      @default(unknown) @map("birth_date_calendar")
+  birthDateText         String?           @map("birth_date_text")
+
+  deathDateValue        DateTime?         @map("death_date_value") @db.Date
+  deathYear             Int?              @map("death_year")
+  deathDatePrecision    DatePrecision     @default(unknown) @map("death_date_precision")
+  deathDateCalendar     DateCalendar      @default(unknown) @map("death_date_calendar")
+  deathDateText         String?           @map("death_date_text")
+
+  memorialDateValue     DateTime?         @map("memorial_date_value") @db.Date
+  memorialLunarDay      Int?              @map("memorial_lunar_day")
+  memorialLunarMonth    Int?              @map("memorial_lunar_month")
+  memorialLunarIsLeap   Boolean?          @map("memorial_lunar_is_leap_month")
+  memorialDateText      String?           @map("memorial_date_text")
+
+  generationCalculated  Int?              @map("generation_calculated")
+  generationManual      Int?              @map("generation_manual")
+  generationDisplay     Int?              @map("generation_display")
+  generationSource      String            @default("calculated") @map("generation_source")
+
+  biographyPublic       String?           @map("biography_public")
+  biographyPrivate      String?           @map("biography_private")
+  achievements          String?
+  occupation            String?
+  education             String?
+
+  hometownPlaceId       String?           @map("hometown_place_id") @db.Uuid
+  birthPlaceId          String?           @map("birth_place_id") @db.Uuid
+  deathPlaceId          String?           @map("death_place_id") @db.Uuid
+  burialPlaceId         String?           @map("burial_place_id") @db.Uuid
+
+  phone                 String?
+  email                 String?
+  currentAddress        String?           @map("current_address")
+  profilePhotoMediaId   String?           @map("profile_photo_media_id") @db.Uuid
+  privacyLevel          PrivacyLevel      @default(normal) @map("privacy_level")
+  status                String            @default("active") // active/archived/merged
+  mergedIntoPersonId    String?           @map("merged_into_person_id") @db.Uuid
+
+  createdByUserId       String            @map("created_by_user_id") @db.Uuid
+  updatedByUserId       String?           @map("updated_by_user_id") @db.Uuid
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  archivedAt            DateTime?         @map("archived_at")
+  archivedByUserId      String?           @map("archived_by_user_id") @db.Uuid
+
+  family                Family            @relation(fields: [familyId], references: [id])
+  branch                Branch?           @relation("PersonBranch", fields: [branchId], references: [id])
+  hometownPlace         Place?            @relation("HometownPlace", fields: [hometownPlaceId], references: [id])
+  birthPlace            Place?            @relation("BirthPlace", fields: [birthPlaceId], references: [id])
+  deathPlace            Place?            @relation("DeathPlace", fields: [deathPlaceId], references: [id])
+  burialPlace           Place?            @relation("BurialPlace", fields: [burialPlaceId], references: [id])
+  profilePhoto          MediaAsset?       @relation("PersonProfilePhoto", fields: [profilePhotoMediaId], references: [id])
+  mergedInto            Person?           @relation("PersonMerge", fields: [mergedIntoPersonId], references: [id])
+  mergedPeople          Person[]          @relation("PersonMerge")
+
+  createdByUser         User              @relation("PersonCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUser         User?             @relation("PersonUpdatedBy", fields: [updatedByUserId], references: [id])
+  archivedByUser        User?             @relation("PersonArchivedBy", fields: [archivedByUserId], references: [id])
+
+  names                 PersonName[]
+  parentRelationships   ParentChildRelationship[] @relation("RelationshipParent")
+  childRelationships    ParentChildRelationship[] @relation("RelationshipChild")
+  partnerships1         Partnership[]     @relation("PartnershipPerson1")
+  partnerships2         Partnership[]     @relation("PartnershipPerson2")
+  events                Event[]
+  foundedBranches       Branch[]          @relation("BranchFounder")
+  userPersonLinks       UserPersonLink[]
+  graves                Grave[]
+
+  @@map("people")
+}
+
+model PersonName {
+  id         String   @id @default(uuid()) @db.Uuid
+  familyId   String   @map("family_id") @db.Uuid
+  personId   String   @map("person_id") @db.Uuid
+  name       String
+  nameType   NameType @default(primary) @map("name_type")
+  language   String?
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  sortOrder  Int      @default(0) @map("sort_order")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  family     Family   @relation(fields: [familyId], references: [id])
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_names")
+}
+
+model ParentChildRelationship {
+  id                String          @id @default(uuid()) @db.Uuid
+  familyId          String          @map("family_id") @db.Uuid
+  parentId          String          @map("parent_id") @db.Uuid
+  childId           String          @map("child_id") @db.Uuid
+  parentRole        ParentRole      @default(unknown) @map("parent_role")
+  relationshipType  ParentChildType @default(biological) @map("relationship_type")
+  childOrder        Int?            @map("child_order")
+  childOrderLabel   String?         @map("child_order_label")
+  certaintyLevel    CertaintyLevel  @default(confirmed) @map("certainty_level")
+  sourceId          String?         @map("source_id") @db.Uuid
+  note              String?
+  status            String          @default("active")
+  createdByUserId   String          @map("created_by_user_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  archivedAt        DateTime?       @map("archived_at")
+
+  family            Family          @relation(fields: [familyId], references: [id])
+  parent            Person          @relation("RelationshipParent", fields: [parentId], references: [id])
+  child             Person          @relation("RelationshipChild", fields: [childId], references: [id])
+  createdByUser     User            @relation("RelationshipCreatedBy", fields: [createdByUserId], references: [id])
+  source            Source?         @relation(fields: [sourceId], references: [id])
+
+  @@map("parent_child_relationships")
+}
+
+model Partnership {
+  id                 String            @id @default(uuid()) @db.Uuid
+  familyId           String            @map("family_id") @db.Uuid
+  person1Id          String            @map("person1_id") @db.Uuid
+  person2Id          String            @map("person2_id") @db.Uuid
+  partnershipType    PartnershipType   @default(marriage) @map("partnership_type")
+  status             PartnershipStatus @default(active)
+  
+  startDateValue     DateTime?         @map("start_date_value") @db.Date
+  startYear          Int?              @map("start_year")
+  startDatePrecision DatePrecision     @default(unknown) @map("start_date_precision")
+  startDateCalendar  DateCalendar      @default(unknown) @map("start_date_calendar")
+  startDateText      String?           @map("start_date_text")
+
+  endDateValue       DateTime?         @map("end_date_value") @db.Date
+  endYear            Int?              @map("end_year")
+  endDatePrecision   DatePrecision     @default(unknown) @map("end_date_precision")
+  endDateCalendar    DateCalendar      @default(unknown) @map("end_date_calendar")
+  endDateText        String?           @map("end_date_text")
+
+  certaintyLevel     CertaintyLevel    @default(confirmed) @map("certainty_level")
+  sourceId           String?           @map("source_id") @db.Uuid
+  note               String?
+  statusRecord       String            @default("active") @map("status_record")
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  archivedAt         DateTime?         @map("archived_at")
+
+  family             Family            @relation(fields: [familyId], references: [id])
+  person1            Person            @relation("PartnershipPerson1", fields: [person1Id], references: [id])
+  person2            Person            @relation("PartnershipPerson2", fields: [person2Id], references: [id])
+  createdByUser      User              @relation("PartnershipCreatedBy", fields: [createdByUserId], references: [id])
+  source             Source?           @relation(fields: [sourceId], references: [id])
+  events             Event[]
+
+  @@map("partnerships")
+}
+
+model Event {
+  id                 String          @id @default(uuid()) @db.Uuid
+  familyId           String          @map("family_id") @db.Uuid
+  personId           String?         @map("person_id") @db.Uuid
+  partnershipId      String?         @map("partnership_id") @db.Uuid
+  branchId           String?         @map("branch_id") @db.Uuid
+  eventType          String          @map("event_type")
+  title              String
+  description        String?
+  
+  eventDateValue     DateTime?       @map("event_date_value") @db.Date
+  eventYear          Int?            @map("event_year")
+  eventDatePrecision DatePrecision   @default(unknown) @map("event_date_precision")
+  eventDateCalendar  DateCalendar    @default(unknown) @map("event_date_calendar")
+  eventDateText      String?         @map("event_date_text")
+
+  placeId            String?         @map("place_id") @db.Uuid
+  privacyLevel       PrivacyLevel    @default(normal) @map("privacy_level")
+  sourceId           String?         @map("source_id") @db.Uuid
+  createdByUserId    String          @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  archivedAt         DateTime?       @map("archived_at")
+
+  family             Family          @relation(fields: [familyId], references: [id])
+  person             Person?         @relation(fields: [personId], references: [id])
+  partnership        Partnership?    @relation(fields: [partnershipId], references: [id])
+  branch             Branch?         @relation(fields: [branchId], references: [id])
+  place              Place?          @relation(fields: [placeId], references: [id])
+  source             Source?         @relation(fields: [sourceId], references: [id])
+  createdByUser      User            @relation("EventCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@map("events")
+}
+
+model Place {
+  id             String   @id @default(uuid()) @db.Uuid
+  familyId       String?  @map("family_id") @db.Uuid
+  parentPlaceId  String?  @map("parent_place_id") @db.Uuid
+  name           String
+  currentName    String?  @map("current_name")
+  historicalName String?  @map("historical_name")
+  placeType      String   @map("place_type")
+  address        String?
+  latitude       Decimal? @db.Decimal(9, 6)
+  longitude      Decimal? @db.Decimal(9, 6)
+  note           String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  family         Family?  @relation(fields: [familyId], references: [id])
+  parentPlace    Place?   @relation("PlaceHierarchy", fields: [parentPlaceId], references: [id])
+  childPlaces    Place[]  @relation("PlaceHierarchy")
+
+  hometownPeople Person[] @relation("HometownPlace")
+  birthPeople    Person[] @relation("BirthPlace")
+  deathPeople    Person[] @relation("DeathPlace")
+  burialPeople   Person[] @relation("BurialPlace")
+  graves         Grave[]
+  events         Event[]
+
+  @@map("places")
+}
+
+model Grave {
+  id             String    @id @default(uuid()) @db.Uuid
+  familyId       String    @map("family_id") @db.Uuid
+  personId       String    @map("person_id") @db.Uuid
+  placeId        String?   @map("place_id") @db.Uuid
+  cemeteryName   String?   @map("cemetery_name")
+  address        String?
+  latitude       Decimal?  @db.Decimal(9, 6)
+  longitude      Decimal?  @db.Decimal(9, 6)
+  googleMapsUrl  String?   @map("google_maps_url")
+  caretakerName  String?   @map("caretaker_name")
+  caretakerContact String? @map("caretaker_contact")
+  reburialNote   String?   @map("reburial_note")
+  note           String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  archivedAt     DateTime? @map("archived_at")
+
+  family         Family    @relation(fields: [familyId], references: [id])
+  person         Person    @relation(fields: [personId], references: [id])
+  place          Place?    @relation(fields: [placeId], references: [id])
+
+  @@map("graves")
+}
+
+model MediaAsset {
+  id                 String          @id @default(uuid()) @db.Uuid
+  familyId           String          @map("family_id") @db.Uuid
+  uploadedByUserId   String          @map("uploaded_by_user_id") @db.Uuid
+  storageProvider    String          @map("storage_provider")
+  storageBucket      String          @map("storage_bucket")
+  storagePath        String          @map("storage_path")
+  originalFileName   String          @map("original_file_name")
+  mimeType           String          @map("mime_type")
+  fileSizeBytes      BigInt          @map("file_size_bytes")
+  checksumSha256     String?         @map("checksum_sha256")
+  title              String?
+  description        String?
+  visibility         MediaVisibility @default(family)
+  status             String          @default("active")
+  metadata           Json?
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  archivedAt         DateTime?       @map("archived_at")
+
+  family             Family          @relation(fields: [familyId], references: [id])
+  uploadedByUser     User            @relation("MediaUploadedBy", fields: [uploadedByUserId], references: [id])
+  profilePhotos      Person[]        @relation("PersonProfilePhoto")
+  sources            Source[]
+  mediaLinks         MediaLink[]
+
+  @@map("media_assets")
+}
+
+model MediaLink {
+  id            String   @id @default(uuid()) @db.Uuid
+  familyId      String   @map("family_id") @db.Uuid
+  mediaAssetId  String   @map("media_asset_id") @db.Uuid
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id") @db.Uuid
+  caption       String?
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  family        Family   @relation(fields: [familyId], references: [id])
+  mediaAsset    MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@map("media_links")
+}
+
+model Source {
+  id                  String         @id @default(uuid()) @db.Uuid
+  familyId            String         @map("family_id") @db.Uuid
+  title               String
+  sourceType          SourceType     @default(other) @map("source_type")
+  author              String?
+  sourceDateText      String?        @map("source_date_text")
+  description         String?
+  reliabilityLevel    CertaintyLevel @default(confirmed) @map("reliability_level")
+  primaryMediaAssetId String?        @map("primary_media_asset_id") @db.Uuid
+  createdByUserId     String         @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  archivedAt          DateTime?      @map("archived_at")
+
+  family              Family         @relation(fields: [familyId], references: [id])
+  primaryMediaAsset   MediaAsset?    @relation(fields: [primaryMediaAssetId], references: [id])
+  createdByUser       User           @relation("SourceCreatedBy", fields: [createdByUserId], references: [id])
+  relationships       ParentChildRelationship[]
+  partnerships        Partnership[]
+  events              Event[]
+  citations           SourceCitation[]
+
+  @@map("sources")
+}
+
+model SourceCitation {
+  id             String         @id @default(uuid()) @db.Uuid
+  familyId       String         @map("family_id") @db.Uuid
+  sourceId       String         @map("source_id") @db.Uuid
+  entityType     String         @map("entity_type")
+  entityId       String         @map("entity_id") @db.Uuid
+  fieldName      String?        @map("field_name")
+  quote          String?
+  note           String?
+  certaintyLevel CertaintyLevel @default(confirmed) @map("certainty_level")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  family         Family         @relation(fields: [familyId], references: [id])
+  source         Source         @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@map("source_citations")
+}
+
+model Membership {
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  familyId         String            @map("family_id") @db.Uuid
+  role             MembershipRole    @default(viewer)
+  branchId         String?           @map("branch_id") @db.Uuid
+  status           MembershipStatus  @default(pending)
+  invitedByUserId  String?           @map("invited_by_user_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  revokedAt        DateTime?         @map("revoked_at")
+
+  user             User              @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  family           Family            @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  branch           Branch?           @relation("BranchMemberships", fields: [branchId], references: [id])
+  invitedByUser    User?             @relation("MembershipInvitedBy", fields: [invitedByUserId], references: [id])
+
+  @@unique([userId, familyId])
+  @@map("memberships")
+}
+
+model UserPersonLink {
+  id                 String   @id @default(uuid()) @db.Uuid
+  familyId           String   @map("family_id") @db.Uuid
+  userId             String   @map("user_id") @db.Uuid
+  personId           String   @map("person_id") @db.Uuid
+  verificationStatus String   @default("pending") @map("verification_status") // pending/verified/rejected
+  verifiedByUserId   String?  @map("verified_by_user_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  family             Family   @relation(fields: [familyId], references: [id])
+  user               User     @relation("UserLinks", fields: [userId], references: [id], onDelete: Cascade)
+  person             Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  verifiedByUser     User?    @relation("VerifiedLinks", fields: [verifiedByUserId], references: [id])
+
+  @@map("user_person_links")
+}
+
+model Invite {
+  id                String         @id @default(uuid()) @db.Uuid
+  familyId          String         @map("family_id") @db.Uuid
+  invitedEmail      String?        @map("invited_email")
+  invitedPhone      String?        @map("invited_phone")
+  role              MembershipRole @default(member)
+  branchId          String?        @map("branch_id") @db.Uuid
+  tokenHash         String         @map("token_hash")
+  status            String         @default("pending") // pending/accepted/expired/revoked
+  expiresAt         DateTime       @map("expires_at")
+  createdByUserId   String         @map("created_by_user_id") @db.Uuid
+  acceptedByUserId  String?        @map("accepted_by_user_id") @db.Uuid
+  acceptedAt        DateTime?      @map("accepted_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  family            Family         @relation(fields: [familyId], references: [id])
+  createdByUser     User           @relation("InviteCreatedBy", fields: [createdByUserId], references: [id])
+  acceptedByUser    User?          @relation("InviteAcceptedBy", fields: [acceptedByUserId], references: [id])
+
+  @@map("invites")
+}
+
+model ChangeRequest {
+  id                 String   @id @default(uuid()) @db.Uuid
+  familyId           String   @map("family_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  targetEntityType   String   @map("target_entity_type")
+  targetEntityId     String?  @map("target_entity_id") @db.Uuid
+  action             String // create/update/archive
+  proposedData       Json     @map("proposed_data")
+  beforeData         Json?    @map("before_data")
+  status             String   @default("pending") // pending/approved/rejected/disputed/cancelled
+  submittedByUserId  String   @map("submitted_by_user_id") @db.Uuid
+  reviewedByUserId   String?  @map("reviewed_by_user_id") @db.Uuid
+  reviewNote         String?  @map("review_note")
+  createdAt          DateTime @default(now()) @map("created_at")
+  reviewedAt         DateTime? @map("reviewed_at")
+
+  family             Family   @relation(fields: [familyId], references: [id])
+  branch             Branch?  @relation(fields: [branchId], references: [id])
+  submittedByUser    User     @relation("ChangeSubmittedBy", fields: [submittedByUserId], references: [id])
+  reviewedByUser     User?    @relation("ChangeReviewedBy", fields: [reviewedByUserId], references: [id])
+
+  @@map("change_requests")
+}
+
+model AuditLog {
+  id           String      @id @default(uuid()) @db.Uuid
+  familyId     String?     @map("family_id") @db.Uuid
+  actorUserId  String?     @map("actor_user_id") @db.Uuid
+  action       String // using String to support flexible values / custom action strings
+  entityType   String      @map("entity_type")
+  entityId     String?     @map("entity_id") @db.Uuid
+  beforeData   Json?       @map("before_data")
+  afterData    Json?       @map("after_data")
+  metadata     Json?
+  ipAddress    String?     @map("ip_address")
+  userAgent    String?     @map("user_agent")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  family       Family?     @relation(fields: [familyId], references: [id])
+  actorUser    User?       @relation("AuditLogsActor", fields: [actorUserId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model SecurityLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  familyId     String?  @map("family_id") @db.Uuid
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  eventType    String   @map("event_type")
+  entityType   String?  @map("entity_type")
+  entityId     String?  @map("entity_id") @db.Uuid
+  metadata     Json?
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  family       Family?  @relation(fields: [familyId], references: [id])
+  actorUser    User?    @relation("SecurityLogsActor", fields: [actorUserId], references: [id])
+
+  @@map("security_logs")
+}
+
+model ExportJob {
+  id                  String    @id @default(uuid()) @db.Uuid
+  familyId            String    @map("family_id") @db.Uuid
+  requestedByUserId   String    @map("requested_by_user_id") @db.Uuid
+  exportType          String    @map("export_type")
+  status              String    @default("queued") // queued/processing/succeeded/failed
+  options             Json?
+  outputMediaAssetId  String?   @map("output_media_asset_id") @db.Uuid
+  errorMessage        String?   @map("error_message")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  completedAt         DateTime? @map("completed_at")
+
+  family              Family    @relation(fields: [familyId], references: [id])
+  requestedByUser     User      @relation("ExportJobsRequester", fields: [requestedByUserId], references: [id])
+
+  @@map("export_jobs")
+}
