@@ -63,7 +63,6 @@ export default async function TreePage() {
       <TreeViewer
         people={processedPeople}
         relationships={relationships}
-        viewerRole={membership.role}
       />
 
     </div>
